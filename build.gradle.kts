@@ -23,6 +23,7 @@ dependencies {
     implementation(libs.ktor.server.netty)
     implementation(libs.logback.classic)
     implementation(libs.ktor.server.config.yaml)
+    implementation("io.ktor:ktor-serialization-kotlinx-json-jvm")
 
     implementation("org.postgresql:postgresql:42.7.3")
 
@@ -32,6 +33,7 @@ dependencies {
 
     implementation("com.zaxxer:HikariCP:5.1.0")
     implementation("org.mindrot:jbcrypt:0.4")
+    implementation(libs.protolite.well.known.types)
 
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.kotlin.test.junit)
