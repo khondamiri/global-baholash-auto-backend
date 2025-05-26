@@ -13,6 +13,9 @@ application {
 
 repositories {
     mavenCentral()
+    maven {
+        url = uri("https://company/com/maven2")
+    }
 }
 
 dependencies {
@@ -33,7 +36,6 @@ dependencies {
 
     implementation("com.zaxxer:HikariCP:5.1.0")
     implementation("org.mindrot:jbcrypt:0.4")
-    implementation(libs.protolite.well.known.types)
 
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.kotlin.test.junit)

@@ -2,7 +2,6 @@ package com.db
 
 import com.common.User
 import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.*
 import java.util.UUID
 

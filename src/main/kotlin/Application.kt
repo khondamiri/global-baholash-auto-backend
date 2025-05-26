@@ -11,8 +11,8 @@ fun main(args: Array<String>) {
 }
 
 fun Application.module() {
-    configureSecurity()
-    configureSerialization()
-    configureRouting()
     DatabaseFactory.init(environment.config)
+    configureSerialization()
+    configureSecurity()
+    configureRouting()
 }
