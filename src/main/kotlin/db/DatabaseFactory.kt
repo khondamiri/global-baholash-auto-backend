@@ -13,7 +13,13 @@ object DatabaseFactory {
     fun init(config: ApplicationConfig) {
         Database.connect(hikari(config))
         transaction {
-            SchemaUtils.create(UsersTable)
+            SchemaUtils.create(
+                UsersTable,
+                AssessmentTypesTable,
+                AssessmentFieldDefinitionsTable,
+                AssessmentProjectsTable,
+                AssessmentFieldValuesTable
+            )
         }
     }
 

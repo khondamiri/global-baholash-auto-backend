@@ -25,10 +25,18 @@ fun Route.authRoutes(userRepository: UserRepository, authService: AuthService) {
 
                 // basic input validation
 
-                if (request.username.isBlank() || request.password.isBlank()) {
+                if (request.username.isBlank() || request.password.isBlank() || request.email.isBlank()) {
                     call.respond(
                         HttpStatusCode.BadRequest,
                         mapOf("error" to "Username or password cannot be empty.")
+                    )
+                    return@post
+                }
+
+                if (!request.email.contains("@") || !request.email.contains(".")) {
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        mapOf("error" to "Invalid email format")
                     )
                     return@post
                 }
@@ -40,22 +48,12 @@ fun Route.authRoutes(userRepository: UserRepository, authService: AuthService) {
                     return@post
                 }
 
-                // existing user check
-
-                val existingUser = userRepository.findUserByUsername(request.username)
-
-                if (existingUser != null) {
-                    call.respond(
-                        HttpStatusCode.BadRequest,
-                        mapOf("error" to "Username already exists."))
-                    return@post
-                }
-
                 // user creation
 
                 val hashedPassword = authService.hashPassword(request.password)
                 val newUser = userRepository.createUser(
                     request.username,
+                    request.email,
                     hashedPassword,
                     "ASSESSOR"
                 )
@@ -66,8 +64,8 @@ fun Route.authRoutes(userRepository: UserRepository, authService: AuthService) {
                     call.respond(HttpStatusCode.Created, AuthResponse(newUser, token))
                 } else {
                     call.respond(
-                        HttpStatusCode.InternalServerError,
-                        mapOf("error" to "Could not create user. Please, try again later.")
+                        HttpStatusCode.Conflict,
+                        mapOf("error" to "Username or email already taken.")
                     )
                 }
 
@@ -81,7 +79,7 @@ fun Route.authRoutes(userRepository: UserRepository, authService: AuthService) {
                 application.log.warn("Registration: Unexpected error.", e)
                 call.respond(
                     HttpStatusCode.InternalServerError,
-                    mapOf("error" to "An unexpected error ocurred.")
+                    mapOf("error" to "An unexpected error occurred.")
                 )
             }
         }

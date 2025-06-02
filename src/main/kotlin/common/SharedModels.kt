@@ -7,6 +7,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class UserCredentialsRequest(
     val username: String,
+    val email: String,
     val password: String
 )
 
@@ -14,6 +15,7 @@ data class UserCredentialsRequest(
 data class User(
     val id: String,
     val username: String,
+    val email: String,
     val role: String
 )
 
@@ -39,7 +41,7 @@ enum class FieldDataType {
 @Serializable
 data class AssessmentFieldDefinition(
     val id: String,
-    val assessmentFieldTypeId: String,
+    val assessmentTypeId: String,
     val fieldKey: String,
     val label: String,
     val fieldType: FieldDataType,
@@ -97,6 +99,7 @@ data class CreateAssessmentRequest(
     val displayName: String,
     val assessmentTypeId: String,
     val fieldValues: List<AssessmentFieldValue>
+//    val creationTimestamp: Long
 )
 
 @Serializable
