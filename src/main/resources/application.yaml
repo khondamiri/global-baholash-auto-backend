@@ -1,7 +1,7 @@
 ktor:
     application:
         modules:
-            - com.ApplicationKt.module
+            - com.globalbaholash.ApplicationKt.module
     deployment:
         port: 8080
         watch: [ classes, resources ]
@@ -20,3 +20,16 @@ database:
   maxPoolSize: 3
   autoCommit: false
   transactionIsolation: "TRANSACTION_REPEATABLE_READ"
+
+email:
+  smtpHost: "smtp.gmail.com"
+  smtpPort: 587
+  smtpUsername: "globalbaholash1@gmail.com"
+  smtpPassword: "dbcwuqzjwgxsnqvk"
+  fromAddress: "globalbaholash1@gmail.com"
+  fromName: "Global Baholash"
+  enableTls: true
+  enableSsl: false
+
+server:
+  baseUrl: "http://localhost:8080"

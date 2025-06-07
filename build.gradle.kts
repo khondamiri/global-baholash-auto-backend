@@ -37,6 +37,9 @@ dependencies {
     implementation("com.zaxxer:HikariCP:5.1.0")
     implementation("org.mindrot:jbcrypt:0.4")
 
+    implementation("jakarta.mail:jakarta.mail-api:2.0.1")
+    implementation("org.eclipse.angus:angus-mail:2.0.3")
+
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.kotlin.test.junit)
 }
