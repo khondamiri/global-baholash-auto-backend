@@ -17,6 +17,7 @@ import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.application
+import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
@@ -138,7 +139,7 @@ fun Route.authRoutes(
                     mapOf("error" to "An unexpected error occurred.")
                 )
             }
-        }
+        } // [*]
 
         get("/verify-email") {
             val token = call.request.queryParameters["token"]
@@ -179,7 +180,7 @@ fun Route.authRoutes(
                     mapOf("error" to "Failed to verify email. Please contact support.")
                 )
             }
-        }
+        } // [*]
 
         // LOGIN AND PASSWORD RESET
 
@@ -248,7 +249,7 @@ fun Route.authRoutes(
                     mapOf("error" to "An unexpected error ocurred.")
                 )
             }
-        }
+        } // [*]
 
         post("/request-password-reset") {
             try {
@@ -298,7 +299,7 @@ fun Route.authRoutes(
                 application.log.error("Password reset request: Unexpected error.", e)
                 call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Unexpected error occurred."))
             }
-        }
+        } // [*]
 
         post("/reset-password") {
             try {
@@ -351,6 +352,6 @@ fun Route.authRoutes(
                 application.log.error("Password reset request: Unexpected error.", e)
                 call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Unexpected error occurred."))
             }
-        }
+        } // [*]
     }
 }

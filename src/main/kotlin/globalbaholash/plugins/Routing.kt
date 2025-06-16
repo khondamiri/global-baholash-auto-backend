@@ -14,7 +14,7 @@ import io.ktor.server.routing.*
 fun Application.configureRouting() {
     val userRepository = UserRepository()
     val authService = AuthService()
-    val assessmentRepository = AssessmentRepositoryImpl()
+    val assessmentRepository = AssessmentRepositoryImpl(this)
     val emailService = EmailService(environment)
 
     routing {
@@ -25,8 +25,8 @@ fun Application.configureRouting() {
         authRoutes(userRepository, authService, emailService)
 
         route("/api") {
-            assessmentRoutes(assessmentRepository)
-            adminRoutes(userRepository)
+            assessmentRoutes(assessmentRepository, userRepository)
+            adminRoutes(userRepository, assessmentRepository)
         }
     }
 }

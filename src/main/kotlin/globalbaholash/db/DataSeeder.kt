@@ -11,17 +11,17 @@ import kotlin.collections.mapOf
 
 suspend fun stdTypeSeeder(log: Logger) {
     DatabaseFactory.dbQuery {
-        val stdTypeName = "Standard Avtomobil Avariyasi"
+        val stdTypeName = "Avtomobil Avariyasi"
 
         if (AssessmentTypesTable.selectAll().where { AssessmentTypesTable.name eq stdTypeName }.empty()) {
             log.info("====== Seeding standard car collision assessment type... ======")
 
-            val stdTypeId = "std-car-collision-v1"
+            val stdTypeId = "type-" + stdTypeName.lowercase().replace(" ", "-") + "-" + UUID.randomUUID().toString().take(8)
 
             AssessmentTypesTable.insert {
                 it[id] = stdTypeId
                 it[name] = stdTypeName
-                it[description] = "Avariya natijasida yetkazilgan zararni hisoblash"
+                it[description] = "xumoyun-ismoilov-car-collision-v1"
             }
             log.info("====== Inserted Assessment Type: $stdTypeName (ID: $stdTypeId) ======")
 

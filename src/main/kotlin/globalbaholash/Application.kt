@@ -20,7 +20,7 @@ fun Application.module() {
 
     launch {
         try {
-            stdTypeSeeder(log)
+//            stdTypeSeeder(log)
             testTypeSeeder(log)
         } catch (e: Exception) {
             log.error("Data seeding failed during startup.", e)

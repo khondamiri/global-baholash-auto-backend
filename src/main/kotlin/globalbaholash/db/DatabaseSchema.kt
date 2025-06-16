@@ -18,12 +18,26 @@ object UsersTable: Table("users") {
     override val primaryKey = PrimaryKey(id)
 }
 
-object AssessmentTypesTable: Table("assessment_types") {
+object AssessmentProjectsTable: Table("assessment_projects") {
     val id = varchar("id", 36)
-    val name = varchar("name", 255).uniqueIndex()
-    val description = text("description").nullable()
+    val displayName = varchar("display_name", 255)
+    val assessmentTypeId = varchar("assessment_type_id", 36)
+        .references(AssessmentTypesTable.id, onDelete = ReferenceOption.SET_NULL)
+    val assessorId = varchar("assessor_id", 36)
+        .references(UsersTable.id, onDelete = ReferenceOption.SET_NULL)
+
+    val status = varchar("status", 50)
+    val creationTimestamp = long("creation_timestamp")
+    val lastModificationTimestamp = long("last_modification_timestamp")
+
+    val publicAccessId = varchar("public_access_id", 36).nullable().uniqueIndex()
+    val documentStoragePath = text("document_storage_path").nullable()
+    val qrCodeData = text("qr_code_data").nullable()
+
     override val primaryKey = PrimaryKey(id)
 }
+
+// FIELDS TABLES
 
 object AssessmentFieldDefinitionsTable: Table("assessment_field_definitions") {
     val id = varchar("id", 36)
@@ -44,25 +58,6 @@ object AssessmentFieldDefinitionsTable: Table("assessment_field_definitions") {
     }
 }
 
-object AssessmentProjectsTable: Table("assessment_projects") {
-    val id = varchar("id", 36)
-    val displayName = varchar("display_name", 255)
-    val assessmentTypeId = varchar("assessment_type_id", 36)
-        .references(AssessmentTypesTable.id, onDelete = ReferenceOption.SET_NULL)
-    val assessorId = varchar("assessor_id", 36)
-        .references(UsersTable.id, onDelete = ReferenceOption.SET_NULL)
-
-    val status = varchar("status", 50)
-    val creationTimestamp = long("creation_timestamp")
-    val lastModificationTimestamp = long("last_modification_timestamp")
-
-    val publicAccessId = varchar("public_access_id", 36).nullable().uniqueIndex()
-    val documentStoragePath = text("document_storage_path").nullable()
-    val qrCodeData = text("qr_code_data").nullable()
-
-    override val primaryKey = PrimaryKey(id)
-}
-
 object AssessmentFieldValuesTable: Table("assessment_field_values") {
     val id = varchar("id", 36)
     val projectId = varchar("projectId", 36)
@@ -80,3 +75,39 @@ object AssessmentFieldValuesTable: Table("assessment_field_values") {
     }
 }
 
+// TYPE TABLES
+
+object AssessmentTypesTable: Table("assessment_types") {
+    val id = varchar("id", 36)
+    val name = varchar("name", 255).uniqueIndex()
+    val description = text("description").nullable()
+    val templateFileNames = text("template_file_names").nullable()
+    override val primaryKey = PrimaryKey(id)
+}
+
+object AssessorTypeAssignmentsTable: Table("assessment_type_assignments") {
+    val assessorId = varchar("assessor_id", 36)
+        .references(UsersTable.id, onDelete = ReferenceOption.CASCADE)
+
+    val assessmentTypeId = varchar("assessment_type_id", 36)
+        .references(AssessmentTypesTable.id, onDelete = ReferenceOption.CASCADE)
+
+    override val primaryKey = PrimaryKey(
+        assessorId,
+        assessmentTypeId,
+        name = "PK_AssessorTypeAssignments"
+    )
+}
+
+object AssessmentProjectDocumentsTable: Table("assessment_project_documents") {
+    val id = varchar("id", 36)
+    val projectId = varchar("project_id", 36)
+        .references(AssessmentProjectsTable.id, onDelete = ReferenceOption.CASCADE)
+    val documentType = varchar("document_type", 50)
+    val originalFileName = varchar("original_file_name", 255)
+    val storedFilePath = text("stored_file_path")
+    val uploadTimestamp = long("upload_timestamp")
+    val versionNumber = integer("version_number").default(1)
+
+    override val primaryKey = PrimaryKey(id)
+}

@@ -2,8 +2,11 @@ package com.globalbaholash.db
 
 import com.globalbaholash.common.User
 import io.ktor.server.application.Application
+import io.ktor.server.engine.applicationEnvironment
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.postgresql.util.PSQLException
 import java.util.UUID
 import javax.xml.crypto.Data
 import kotlin.math.log
@@ -69,8 +72,6 @@ class UserRepository () {
                 .singleOrNull()
         }
     }
-
-
 
     suspend fun storeEmailVerificationToken(userId: String, token: String): Boolean {
         return DatabaseFactory.dbQuery {
@@ -161,6 +162,19 @@ class UserRepository () {
             UsersTable.update({ UsersTable.id eq userId }) {
                 it[UsersTable.isActive] = isActive
             } > 0
+        }
+    }
+
+    suspend fun deleteAssessorById(assessorId: String): Boolean {
+        return DatabaseFactory.dbQuery {
+            val user = UsersTable.selectAll().where { (UsersTable.id eq assessorId) and (UsersTable.role eq "ASSESSOR") }.singleOrNull()
+            if (user == null) {
+                exposedLogger.error("An attempt to delete non-existent or non-assessor user with ID $assessorId")
+                return@dbQuery false
+            }
+
+            val deletedRows = UsersTable.deleteWhere { UsersTable.id eq assessorId }
+            deletedRows > 0
         }
     }
 

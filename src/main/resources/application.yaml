@@ -33,3 +33,7 @@ email:
 
 server:
   baseUrl: "http://localhost:8080"
+
+paths:
+  templates: "storage/templates"
+  projects: "storage/projects"

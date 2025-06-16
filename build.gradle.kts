@@ -40,6 +40,9 @@ dependencies {
     implementation("jakarta.mail:jakarta.mail-api:2.0.1")
     implementation("org.eclipse.angus:angus-mail:2.0.3")
 
+    implementation("org.apache.poi:poi:5.2.5")
+    implementation("org.apache.poi:poi-ooxml:5.2.5")
+
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.kotlin.test.junit)
 }

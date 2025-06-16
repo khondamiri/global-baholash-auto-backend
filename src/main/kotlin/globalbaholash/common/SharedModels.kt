@@ -63,7 +63,45 @@ data class UpdateAssessorStatusRequest(
     val isActive: Boolean
 )
 
-// --- Assessment types and field data ---
+@Serializable
+data class UpdateTypeNameDescRequest(
+    val name: String?,
+    val description: String?
+)
+
+// ADMIN ASSESSMENT TYPE MANAGEMENT
+
+@Serializable
+data class AssessmentTypeUpsertRequest(
+    val name: String,
+    val description: String? = null,
+    val fieldDefinitions: List<CreateFieldDefinitionRequest>
+)
+
+@Serializable
+data class CreateFieldDefinitionRequest(
+    val fieldKey: String,
+    val label: String,
+    val fieldType: FieldDataType,
+    val options: List<String>? = null,
+    val isRequired: Boolean = false,
+    val order: Int = 0,
+    val section: String? = null
+)
+
+@Serializable
+data class AssignTypeToAssessorRequest(
+    val assessmentTypeId: String
+)
+
+@Serializable
+data class CreateAssessmentTypeMetadata(
+    val name: String,
+    val description: String? = null,
+    val fieldDefinitionJson: String
+)
+
+// ASSESSMENT TYPES AND FIELD DATA
 
 @Serializable
 enum class FieldDataType {
@@ -97,8 +135,6 @@ data class AssessmentType(
     val fieldDefinitions: List<AssessmentFieldDefinition>? = null
 )
 
-// --- Assessment project & their actual field values ---
-
 @Serializable
 enum class ProjectStatus {
     ACTIVE,
@@ -129,8 +165,6 @@ data class AssessmentProject(
     val documentStoragePath: String? = null,
     val qrCodeData: String? = null
 )
-
-// --- Data transfer objects (DTO) for API requests/responses ---
 
 @Serializable
 data class CreateAssessmentRequest(

@@ -4,12 +4,15 @@ import com.globalbaholash.common.AssessmentFieldDefinition
 import com.globalbaholash.common.AssessmentFieldValue
 import com.globalbaholash.common.AssessmentProject
 import com.globalbaholash.common.AssessmentType
+import com.globalbaholash.common.CreateFieldDefinitionRequest
 import com.globalbaholash.common.FieldDataType
 import com.globalbaholash.common.ProjectStatus
 
+import io.ktor.server.application.*
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
+import org.jetbrains.exposed.sql.JoinType
 import org.jetbrains.exposed.sql.ResultRow
 import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
@@ -19,20 +22,17 @@ import org.jetbrains.exposed.sql.exposedLogger
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
+import org.postgresql.util.PSQLException
 import java.util.UUID
 import kotlin.let
 
 interface AssessmentRepository {
-
-    // assessment types and fields
 
     suspend fun getAssessmentTypes(): List<AssessmentType>
 
     suspend fun getAssessmentTypeById(typeId: String): AssessmentType?
 
     suspend fun getFieldDefinitionsForType(typeId: String): List<AssessmentFieldDefinition>
-
-    // CRUD functions
 
     suspend fun createAssessmentProject(
         displayName: String,
@@ -41,6 +41,13 @@ interface AssessmentRepository {
         /*creationTime: Long,*/
         fieldValues: List<AssessmentFieldValue>?
     ): AssessmentProject?
+
+    suspend fun addDocumentRecord(
+        projectId: String,
+        documentType: String,
+        originalFileName: String,
+        storedFilePath: String
+    ): Boolean
 
     suspend fun getAssessmentProjectById(projectId: String, assessorId: String): AssessmentProject?
 
@@ -55,15 +62,35 @@ interface AssessmentRepository {
     ): Boolean
 
     suspend fun deleteAssessmentProject(projectId: String, assessorId: String): Boolean
+
+    // ADMIN FUNCTIONALITY
+
+    suspend fun createAssessmentTypeWithTemplates(
+        name: String,
+        description: String?,
+        fieldDefinitionsRequest: List<CreateFieldDefinitionRequest>,
+        templateFileNames: List<String>
+    ): AssessmentType?
+
+    suspend fun updateAssessmentType(
+        typeId: String,
+        newName: String?,
+        newDescription: String?,
+    ): AssessmentType?
+
+    suspend fun deleteAssessmentType(typeId: String): Boolean
+
+    suspend fun assignTypeToAssessor(assessorId: String, typeId: String): Boolean
+    suspend fun removeTypeFromAssessor(assessorId: String, typeId: String): Boolean
+    suspend fun getAssignedTypesForAssessor(assessorId: String): List<AssessmentType>
+    suspend fun isTypeAssignedToAssessor(assessorId: String, typeId: String): Boolean
 }
 
-class AssessmentRepositoryImpl() : AssessmentRepository {
+class AssessmentRepositoryImpl(private val application: Application) : AssessmentRepository {
 
     // ==================================
     //             METHODS
     // ==================================
-
-    // assessment types and fields
 
     override suspend fun getAssessmentTypes(): List<AssessmentType> = DatabaseFactory.dbQuery {
         AssessmentTypesTable.selectAll().map { mapToAssessmentType(it) }
@@ -91,8 +118,6 @@ class AssessmentRepositoryImpl() : AssessmentRepository {
         }
     }
 
-    // CRUD functions
-
     override suspend fun createAssessmentProject(
         displayName: String,
         assessmentTypeId: String,
@@ -100,6 +125,24 @@ class AssessmentRepositoryImpl() : AssessmentRepository {
         /*creationTimeInput: Long,*/
         fieldValues: List<AssessmentFieldValue>?
     ): AssessmentProject? = DatabaseFactory.dbQuery {
+        val assessorRow = UsersTable.selectAll().where { UsersTable.id eq assessorId }.singleOrNull()
+
+        if (assessorRow == null) {
+            application.log.error("Attempt to create assessment for non-existent user")
+            return@dbQuery null
+        }
+
+        val currentCredits = assessorRow[UsersTable.credits]
+
+        if (currentCredits <= 0) {
+            application.log.error("User tried to create project with insufficient credits: $currentCredits")
+            return@dbQuery null
+        }
+
+        UsersTable.update({ UsersTable.id eq assessorId }) {
+            it[credits] = currentCredits - 1
+        }
+
         val projectId = UUID.randomUUID().toString()
 
         // insert main project record
@@ -130,9 +173,13 @@ class AssessmentRepositoryImpl() : AssessmentRepository {
 
         // return project
         AssessmentProject(
-            id = projectId, displayName = displayName, assessmentTypeId = assessmentTypeId,
-            assessorId = assessorId, status = ProjectStatus.ACTIVE,
-            creationTimestamp = /*creationTimeInput*/ System.currentTimeMillis() , lastModifiedTimestamp = System.currentTimeMillis(),
+            id = projectId,
+            displayName = displayName,
+            assessmentTypeId = assessmentTypeId,
+            assessorId = assessorId,
+            status = ProjectStatus.ACTIVE,
+            creationTimestamp = /*creationTimeInput*/ System.currentTimeMillis() ,
+            lastModifiedTimestamp = System.currentTimeMillis(),
             fieldValues = processedFieldValues
         )
     }
@@ -258,6 +305,161 @@ class AssessmentRepositoryImpl() : AssessmentRepository {
             (AssessmentProjectsTable.id eq projectId) and (AssessmentProjectsTable.assessorId eq assessorId)
         }
         deletedRows > 0
+    }
+
+    // ==================================
+    //        ADMIN FUNCTIONALITY
+    // ==================================
+
+    override suspend fun createAssessmentTypeWithTemplates(
+        name: String,
+        description: String?,
+        fieldDefinitionsRequest: List<CreateFieldDefinitionRequest>,
+        templateFileNames: List<String>
+    ): AssessmentType? = DatabaseFactory.dbQuery {
+        if (!AssessmentTypesTable.selectAll().where { AssessmentTypesTable.name eq name }.empty()) {
+            exposedLogger.warn("Attempt to create assessment type with existing name: $name")
+            return@dbQuery null
+        }
+
+        val newTypeId = "type-" + name.lowercase().replace(" ", "-") + "-" + UUID.randomUUID().toString().take(8)
+
+        AssessmentTypesTable.insert {
+            it[id] = newTypeId
+            it[AssessmentTypesTable.name] = name
+            it[AssessmentTypesTable.description] = description
+            it[AssessmentTypesTable.templateFileNames] = Json.encodeToString(templateFileNames)
+        }
+
+        val createdFieldDefinitions = mutableListOf<AssessmentFieldDefinition>()
+        fieldDefinitionsRequest.forEach { fieldReq ->
+            val fieldDefId = UUID.randomUUID().toString()
+            AssessmentFieldDefinitionsTable.insert {
+                it[id] = fieldDefId
+                it[assessmentTypeId] = newTypeId
+                it[fieldKey] = fieldReq.fieldKey
+                it[label] = fieldReq.label
+                it[fieldType] = fieldReq.fieldType.name
+                it[options] = fieldReq.options?.let { opts -> Json.encodeToString(opts) }
+                it[order] = fieldReq.order
+                it[isRequired] = fieldReq.isRequired
+                it[section] = fieldReq.section
+            }
+
+            createdFieldDefinitions.add(
+                AssessmentFieldDefinition(
+                    fieldDefId, newTypeId, fieldReq.fieldKey, fieldReq.label,
+                    fieldReq.fieldType, fieldReq.options, fieldReq.isRequired,
+                    fieldReq.order, fieldReq.section
+                )
+            )
+        }
+
+        AssessmentType(newTypeId, name, description, createdFieldDefinitions)
+    }
+
+    override suspend fun addDocumentRecord(
+        projectId: String,
+        documentType: String,
+        originalFileName: String,
+        storedFilePath: String
+    ): Boolean = DatabaseFactory.dbQuery {
+        val docId = UUID.randomUUID().toString()
+
+        AssessmentProjectDocumentsTable.insert {
+            it[id] = docId
+            it[AssessmentProjectDocumentsTable.projectId] = projectId
+            it[AssessmentProjectDocumentsTable.documentType] = documentType
+            it[AssessmentProjectDocumentsTable.originalFileName] = originalFileName
+            it[AssessmentProjectDocumentsTable.storedFilePath] = storedFilePath
+            it[AssessmentProjectDocumentsTable.uploadTimestamp] = System.currentTimeMillis()
+        }.resultedValues?.isNotEmpty() ?: false
+    }
+
+    override suspend fun updateAssessmentType(
+        typeId: String,
+        newName: String?,
+        newDescription: String?,
+    ): AssessmentType? = DatabaseFactory.dbQuery {
+        newName?.let { nn ->
+            if (AssessmentTypesTable.selectAll().where { (AssessmentTypesTable.name eq nn) and (AssessmentTypesTable.id neq typeId) }.any()) {
+                exposedLogger.warn("Attempt to update assessment type $typeId to existing name: $nn")
+                return@dbQuery null
+            }
+
+            val updatedRows = AssessmentTypesTable.update({ AssessmentTypesTable.id eq typeId }) {
+                newName?.let { nn -> it[name] = nn }
+                newDescription?.let { nd -> it[description] = nd }
+            }
+
+            if (updatedRows > 0) {
+                getAssessmentTypeById(typeId)
+            } else {
+                null
+            }
+        }
+    }
+
+    override suspend fun deleteAssessmentType(typeId: String): Boolean = DatabaseFactory.dbQuery {
+        try {
+            AssessmentTypesTable.deleteWhere { AssessmentTypesTable.id eq typeId } > 0
+        } catch (e: PSQLException) {
+            if (e.message?.contains("violates foreign key constraint") == true &&
+                e.message?.contains("assessment_projects_assessment_type_id_fkey") == true) {
+                exposedLogger.warn("Attempt to delete assessment type $typeId still in use by projects")
+                false
+            } else {
+                throw e
+            }
+        }
+    }
+
+    override suspend fun assignTypeToAssessor(assessorId: String, typeId: String): Boolean = DatabaseFactory.dbQuery {
+        val assessorExists = UsersTable.selectAll().where { UsersTable.id eq assessorId }.count() > 0
+        val typeExists = AssessmentTypesTable.selectAll().where { AssessmentTypesTable.id eq typeId }.count() > 0
+
+        if (!assessorExists || !typeExists) {
+            exposedLogger.warn("AssignType: Assessor $assessorId or Type $typeId not found.")
+            return@dbQuery false
+        }
+
+        if (AssessmentTypesTable.selectAll().where { (AssessorTypeAssignmentsTable.assessorId eq assessorId) and
+                    (AssessorTypeAssignmentsTable.assessmentTypeId eq typeId) }.empty()) {
+            AssessorTypeAssignmentsTable.insert {
+                it[AssessorTypeAssignmentsTable.assessmentTypeId] = typeId
+                it[AssessorTypeAssignmentsTable.assessorId] = assessorId
+            }
+            true
+        } else {
+            false
+        }
+    }
+
+    override suspend fun removeTypeFromAssessor(assessorId: String, typeId: String): Boolean = DatabaseFactory.dbQuery {
+        AssessorTypeAssignmentsTable.deleteWhere {
+            (AssessorTypeAssignmentsTable.assessorId eq assessorId) and (AssessorTypeAssignmentsTable.assessmentTypeId eq typeId)
+        } > 0
+    }
+
+    override suspend fun getAssignedTypesForAssessor(assessorId: String): List<AssessmentType> = DatabaseFactory.dbQuery {
+        AssessmentTypesTable.join(
+            AssessorTypeAssignmentsTable,
+            JoinType.INNER,
+            AssessmentTypesTable.id,
+            AssessorTypeAssignmentsTable.assessmentTypeId
+        )
+            .selectAll().where { AssessorTypeAssignmentsTable.assessorId eq assessorId }
+            .map { resultRow ->
+                val typeId = resultRow[AssessmentTypesTable.id]
+                val definitions = getFieldDefinitionsForType(typeId)
+                mapToAssessmentType(resultRow, definitions)
+            }
+    }
+
+    override suspend fun isTypeAssignedToAssessor(assessorId: String, typeId: String): Boolean = DatabaseFactory.dbQuery {
+        !AssessorTypeAssignmentsTable.selectAll().where {
+            (AssessorTypeAssignmentsTable.assessorId eq assessorId) and (AssessorTypeAssignmentsTable.assessmentTypeId eq typeId)
+        }.empty()
     }
 
     // ==================================

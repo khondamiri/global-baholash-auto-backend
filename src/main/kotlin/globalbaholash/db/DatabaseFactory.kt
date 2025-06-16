@@ -18,7 +18,8 @@ object DatabaseFactory {
                 AssessmentTypesTable,
                 AssessmentFieldDefinitionsTable,
                 AssessmentProjectsTable,
-                AssessmentFieldValuesTable
+                AssessmentFieldValuesTable,
+                AssessorTypeAssignmentsTable
             )
         }
     }
