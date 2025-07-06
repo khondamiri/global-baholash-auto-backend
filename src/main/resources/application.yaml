@@ -38,3 +38,4 @@ app:
   paths:
     templates: "storage/templates"
     projects: "storage/projects"
+    publicBaseUrl: "http://localhost:8080/public/docs"

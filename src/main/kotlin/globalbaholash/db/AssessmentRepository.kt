@@ -98,6 +98,8 @@ interface AssessmentRepository {
 
     suspend fun getDocumentsForProject(projectId: String, documentType: String): List<AssessmentProjectDocument>
     suspend fun updateProjectPublishingInfo(projectId: String, publicAccessId: String, finalDocPath: String, qrCodeData: String): Boolean
+
+    suspend fun findProjectByPublicAccessId(publicAccessId: String): AssessmentProject?
 }
 
 class AssessmentRepositoryImpl(private val application: Application) : AssessmentRepository {
@@ -500,6 +502,21 @@ class AssessmentRepositoryImpl(private val application: Application) : Assessmen
         originalFileName = row[AssessmentProjectDocumentsTable.originalFileName],
         storedFilePath = row[AssessmentProjectDocumentsTable.storedFilePath]
     )
+
+    override suspend fun findProjectByPublicAccessId(publicAccessId: String): AssessmentProject? = DatabaseFactory.dbQuery {
+        val projectRow = AssessmentProjectsTable
+            .selectAll().where { AssessmentProjectsTable.publicAccessId eq publicAccessId }
+            .singleOrNull()
+
+        projectRow?.let {
+            val projectId = it[AssessmentProjectsTable.id]
+            val values = AssessmentFieldValuesTable
+                .selectAll().where { AssessmentFieldValuesTable.projectId eq projectId }
+                .map { mapToFieldValue(it) }
+
+            mapToAssessmentProject(it, values)
+        }
+    }
 
     // =================================================================================
 

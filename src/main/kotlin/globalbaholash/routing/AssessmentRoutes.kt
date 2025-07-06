@@ -302,7 +302,7 @@ fun Route.assessmentRoutes(assessmentRepository: AssessmentRepository, userRepos
                 }
             } // [*]
 
-            //
+            // download specific generated files
             get("/{projectId}/documents/{documentType}/{fileName...}") {
                 val assessorId = call.principal<JWTPrincipal>()!!.payload.getClaim("userId").asString()
                 val projectID = call.parameters["projectId"] ?: return@get call.respond(HttpStatusCode.BadRequest)
@@ -344,6 +344,36 @@ fun Route.assessmentRoutes(assessmentRepository: AssessmentRepository, userRepos
                 }
                 call.respond(HttpStatusCode.OK, mapOf("message" to "Files uploaded", "uploaded files" to uploadedFilesInfo))
             } // [*]
+
+            // PUBLISHING ENDPOINTS
+
+            // publish final report
+            post("/{projectId}/publish") {
+                val principal = call.principal<JWTPrincipal>()
+                val assessorId = principal?.payload?.getClaim("userId")?.asString()
+                    ?: return@post call.respond(HttpStatusCode.Unauthorized)
+                val projectId = call.parameters["projectId"]
+                    ?: return@post call.respond(HttpStatusCode.BadRequest, "Missing project ID")
+
+                try {
+                    val appConfig = application.environment.config
+                    val publicBaseUrl = appConfig.propertyOrNull("app.paths.publicBaseUrl")?.getString()
+                        ?: "http://localhost:8080/public/docs"
+                    val publishInfo = reportService.publishAssessment(projectId, assessorId, publicBaseUrl)
+
+                    if (publishInfo != null) {
+                        call.respond(HttpStatusCode.OK, publishInfo)
+                    } else {
+                        call.respond(
+                            HttpStatusCode.InternalServerError,
+                            mapOf("error" to "Failed to publish assessment.")
+                        )
+                    }
+                } catch (e: Exception) {
+                    application.log.error("Publishing endpoint failed for project $projectId: ${e.message}", e)
+                    call.respond(HttpStatusCode.InternalServerError, "An unexpected error occurred during publishing.")
+                }
+            }
         }
     }
 }
