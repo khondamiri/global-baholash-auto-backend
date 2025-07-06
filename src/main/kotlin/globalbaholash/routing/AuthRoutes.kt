@@ -69,7 +69,7 @@ fun Route.authRoutes(
                     return@post
                 }
 
-                    if (userRepository.findUserByEmail(request.email) != null) {
+                if (userRepository.findUserByEmail(request.email) != null) {
                     call.respond(
                         HttpStatusCode.Conflict,
                         mapOf("error" to "Email already exist")

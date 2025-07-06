@@ -51,6 +51,7 @@ object AssessmentFieldDefinitionsTable: Table("assessment_field_definitions") {
     val isRequired = bool("is_required").default(false)
     val order = integer("display_order").default(0)
     val section = varchar("section", 100).nullable()
+    val defaultTextIfEmpty = text("default_text_if_empty").nullable()
 
     override val primaryKey = PrimaryKey(id)
     init {

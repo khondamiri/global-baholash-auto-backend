@@ -5,14 +5,20 @@ import com.globalbaholash.common.CreateAssessmentRequest
 import com.globalbaholash.common.ProjectStatus
 import com.globalbaholash.db.AssessmentRepository
 import com.globalbaholash.db.UserRepository
+import globalbaholashauto.services.ReportService
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.content.PartData
+import io.ktor.http.content.forEachPart
+import io.ktor.http.content.streamProvider
 import io.ktor.server.application.log
 import io.ktor.server.auth.authenticate
 import io.ktor.server.auth.jwt.JWTPrincipal
 import io.ktor.server.auth.principal
 import io.ktor.server.plugins.ContentTransformationException
 import io.ktor.server.request.receive
+import io.ktor.server.request.receiveMultipart
 import io.ktor.server.response.respond
+import io.ktor.server.response.respondFile
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.application
 import io.ktor.server.routing.delete
@@ -20,8 +26,10 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 import io.ktor.server.routing.route
+import java.io.File
+import java.nio.file.Paths
 
-fun Route.assessmentRoutes(assessmentRepository: AssessmentRepository, userRepository: UserRepository) {
+fun Route.assessmentRoutes(assessmentRepository: AssessmentRepository, userRepository: UserRepository, reportService: ReportService) {
 
     authenticate("auth-jwt") {
         route("/assessment-types") {
@@ -77,6 +85,8 @@ fun Route.assessmentRoutes(assessmentRepository: AssessmentRepository, userRepos
         }
 
         route("/assessments") {
+
+            // ASSESSMENT WORKFLOW
 
             // create assessment
             post {
@@ -276,6 +286,63 @@ fun Route.assessmentRoutes(assessmentRepository: AssessmentRepository, userRepos
                     call.respond(HttpStatusCode.InternalServerError,
                         mapOf("error" to "Could not mark project as finished"))
                 }
+            } // [*]
+
+            // DOCUMENT WORKFLOW
+
+            // generate initial docs
+            post("/{projectId}/generate-initial-documents") {
+                val assessorId = call.principal<JWTPrincipal>()!!.payload.getClaim("userId").asString()
+                val projectID = call.parameters["projectId"] ?: return@post call.respond(HttpStatusCode.BadRequest)
+                val generatedDocs = reportService.generateInitialDocuments(projectID, assessorId)
+                if (generatedDocs != null) {
+                    call.respond(HttpStatusCode.OK, generatedDocs)
+                } else {
+                    call.respond(HttpStatusCode.NotFound)
+                }
+            } // [*]
+
+            //
+            get("/{projectId}/documents/{documentType}/{fileName...}") {
+                val assessorId = call.principal<JWTPrincipal>()!!.payload.getClaim("userId").asString()
+                val projectID = call.parameters["projectId"] ?: return@get call.respond(HttpStatusCode.BadRequest)
+                val documentType = call.parameters["documentType"] ?: return@get call.respond(HttpStatusCode.BadRequest)
+                val fileName = call.parameters.getAll("fileName")?.joinToString("/") ?: return@get call.respond(HttpStatusCode.BadRequest)
+
+                if (assessmentRepository.getAssessmentProjectById(projectID, assessorId) == null) {
+                    return@get call.respond(HttpStatusCode.Forbidden)
+                }
+
+                val file = File("storage/projects/$projectID/$documentType/$fileName")
+                if (file.exists()) call.respondFile(file) else call.respond(HttpStatusCode.NotFound)
+            } // [*]
+
+            // upload modified docs
+            post("/{projectId}/upload-modified") {
+                val assessorId = call.principal<JWTPrincipal>()!!.payload.getClaim("userId").asString()
+                val projectID = call.parameters["projectId"] ?: return@post call.respond(HttpStatusCode.BadRequest)
+
+                if (assessmentRepository.getAssessmentProjectById(projectID, assessorId) == null) {
+                    return@post call.respond(HttpStatusCode.Forbidden)
+                }
+
+                val multipartData = call.receiveMultipart()
+                val uploadedFilesInfo = mutableListOf<String>()
+                multipartData.forEachPart { part ->
+                    if (part is PartData.FileItem) {
+                        val originalFileName = part.originalFileName ?: "unknown"
+                        val storageDir = Paths.get("storage", "projects", projectID, "modified").toFile()
+                        storageDir.mkdirs()
+                        val file = File(storageDir, originalFileName)
+                        part.streamProvider().use { input -> file.outputStream().buffered().use { output -> input.copyTo(output) } }
+
+                        val storedRelativePath = Paths.get(projectID, "modified", originalFileName).toString()
+                        assessmentRepository.addDocumentRecord(projectID, "MODIFIED", originalFileName, storedRelativePath)
+                        uploadedFilesInfo.add(originalFileName)
+                    }
+                    part.dispose
+                }
+                call.respond(HttpStatusCode.OK, mapOf("message" to "Files uploaded", "uploaded files" to uploadedFilesInfo))
             } // [*]
         }
     }

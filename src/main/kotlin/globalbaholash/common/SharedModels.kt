@@ -86,7 +86,8 @@ data class CreateFieldDefinitionRequest(
     val options: List<String>? = null,
     val isRequired: Boolean = false,
     val order: Int = 0,
-    val section: String? = null
+    val section: String? = null,
+    val defaultTextIfEmpty: String? = null
 )
 
 @Serializable
@@ -124,7 +125,8 @@ data class AssessmentFieldDefinition(
     val options: List<String>? = null,
     val isRequired: Boolean = false,
     val order: Int = 0,
-    val section: String? = null
+    val section: String? = null,
+    val defaultTextIfEmpty: String? = null
 )
 
 @Serializable
@@ -132,6 +134,7 @@ data class AssessmentType(
     val id: String,
     val name: String,
     val description: String? = null,
+    val templateFileNames: List<String>? = null,
     val fieldDefinitions: List<AssessmentFieldDefinition>? = null
 )
 

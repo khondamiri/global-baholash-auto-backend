@@ -11,6 +11,7 @@ import com.globalbaholash.common.ProjectStatus
 import io.ktor.server.application.*
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.descriptors.StructureKind
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.JoinType
 import org.jetbrains.exposed.sql.ResultRow
@@ -27,6 +28,10 @@ import java.util.UUID
 import kotlin.let
 
 interface AssessmentRepository {
+
+    // =================================================================================
+
+    // ============================== CRUD FUNCTIONALITY ===============================
 
     suspend fun getAssessmentTypes(): List<AssessmentType>
 
@@ -63,7 +68,9 @@ interface AssessmentRepository {
 
     suspend fun deleteAssessmentProject(projectId: String, assessorId: String): Boolean
 
-    // ADMIN FUNCTIONALITY
+    // =================================================================================
+
+    // ============================== ADMIN FUNCTIONALITY ==============================
 
     suspend fun createAssessmentTypeWithTemplates(
         name: String,
@@ -84,13 +91,16 @@ interface AssessmentRepository {
     suspend fun removeTypeFromAssessor(assessorId: String, typeId: String): Boolean
     suspend fun getAssignedTypesForAssessor(assessorId: String): List<AssessmentType>
     suspend fun isTypeAssignedToAssessor(assessorId: String, typeId: String): Boolean
+
+    // =================================================================================
+
+    // =========================== PUBLISHING FUNCTIONALITY ============================
+
+    suspend fun getDocumentsForProject(projectId: String, documentType: String): List<AssessmentProjectDocument>
+    suspend fun updateProjectPublishingInfo(projectId: String, publicAccessId: String, finalDocPath: String, qrCodeData: String): Boolean
 }
 
 class AssessmentRepositoryImpl(private val application: Application) : AssessmentRepository {
-
-    // ==================================
-    //             METHODS
-    // ==================================
 
     override suspend fun getAssessmentTypes(): List<AssessmentType> = DatabaseFactory.dbQuery {
         AssessmentTypesTable.selectAll().map { mapToAssessmentType(it) }
@@ -307,9 +317,9 @@ class AssessmentRepositoryImpl(private val application: Application) : Assessmen
         deletedRows > 0
     }
 
-    // ==================================
-    //        ADMIN FUNCTIONALITY
-    // ==================================
+    // =================================================================================
+
+    // ============================== ADMIN FUNCTIONALITY ==============================
 
     override suspend fun createAssessmentTypeWithTemplates(
         name: String,
@@ -344,18 +354,19 @@ class AssessmentRepositoryImpl(private val application: Application) : Assessmen
                 it[order] = fieldReq.order
                 it[isRequired] = fieldReq.isRequired
                 it[section] = fieldReq.section
+                it[defaultTextIfEmpty] = fieldReq.defaultTextIfEmpty
             }
 
             createdFieldDefinitions.add(
                 AssessmentFieldDefinition(
                     fieldDefId, newTypeId, fieldReq.fieldKey, fieldReq.label,
                     fieldReq.fieldType, fieldReq.options, fieldReq.isRequired,
-                    fieldReq.order, fieldReq.section
+                    fieldReq.order, fieldReq.section, fieldReq.defaultTextIfEmpty
                 )
             )
         }
 
-        AssessmentType(newTypeId, name, description, createdFieldDefinitions)
+        AssessmentType(newTypeId, name, description, templateFileNames,createdFieldDefinitions)
     }
 
     override suspend fun addDocumentRecord(
@@ -462,14 +473,54 @@ class AssessmentRepositoryImpl(private val application: Application) : Assessmen
         }.empty()
     }
 
-    // ==================================
-    //         HELPER FUNCTIONS
-    // ==================================
+    // =================================================================================
+
+    // =========================== PUBLISHING FUNCTIONALITY ============================
+
+    override suspend fun getDocumentsForProject(projectId: String, documentType: String): List<AssessmentProjectDocument> =
+        DatabaseFactory.dbQuery {
+            AssessmentProjectDocumentsTable.selectAll().where { (AssessmentProjectDocumentsTable.projectId eq projectId) and
+                    (AssessmentProjectDocumentsTable.documentType eq documentType) }
+                .map { mapToDocument(it) }
+        }
+
+    override suspend fun updateProjectPublishingInfo(projectId: String, publicAccessId: String, finalDocPath: String, qrCodeData: String): Boolean =
+        DatabaseFactory.dbQuery {
+            AssessmentProjectsTable.update({ AssessmentProjectsTable.id eq projectId }) {
+                it[AssessmentProjectsTable.publicAccessId] = AssessmentProjectsTable.publicAccessId
+                it[documentStoragePath] = finalDocPath
+                it[AssessmentProjectsTable.qrCodeData] = qrCodeData
+            } > 0
+        }
+
+    private fun mapToDocument(row: ResultRow) = AssessmentProjectDocument(
+        id = row[AssessmentProjectDocumentsTable.id],
+        projectId = row[AssessmentProjectDocumentsTable.projectId],
+        documentType = row[AssessmentProjectDocumentsTable.documentType],
+        originalFileName = row[AssessmentProjectDocumentsTable.originalFileName],
+        storedFilePath = row[AssessmentProjectDocumentsTable.storedFilePath]
+    )
+
+    // =================================================================================
+
+    // ==================================== HELPERS ====================================
 
     private fun mapToAssessmentType(row: ResultRow, definitions: List<AssessmentFieldDefinition>? = null) = AssessmentType(
         id = row[AssessmentTypesTable.id],
         name = row[AssessmentTypesTable.name],
         description = row[AssessmentTypesTable.description],
+        templateFileNames = row[AssessmentTypesTable.templateFileNames]?.let { jsonString ->
+            if (jsonString.isNotBlank()) {
+                try {
+                    Json.decodeFromString(ListSerializer(String.serializer()), jsonString)
+                } catch (e: Exception) {
+                    application.log.error("Failed to parse templateFileNames JSON: '$jsonString' for AssessmentType ID: ${row[AssessmentTypesTable.id]}", e)
+                    null
+                }
+            } else {
+                null
+            }
+        },
         fieldDefinitions = definitions
     )
 
@@ -490,6 +541,7 @@ class AssessmentRepositoryImpl(private val application: Application) : Assessmen
         isRequired = row[AssessmentFieldDefinitionsTable.isRequired],
         order = row[AssessmentFieldDefinitionsTable.order],
         section = row[AssessmentFieldDefinitionsTable.section],
+        defaultTextIfEmpty = row[AssessmentFieldDefinitionsTable.defaultTextIfEmpty]
     )
 
     private fun mapToAssessmentProject(row: ResultRow, values: List<AssessmentFieldValue>) = AssessmentProject(
@@ -514,3 +566,5 @@ class AssessmentRepositoryImpl(private val application: Application) : Assessmen
         }
     )
 }
+
+data class AssessmentProjectDocument(val id: String, val projectId: String, val documentType: String, val originalFileName: String, val storedFilePath: String)

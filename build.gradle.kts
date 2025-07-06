@@ -28,21 +28,31 @@ dependencies {
     implementation(libs.ktor.server.config.yaml)
     implementation("io.ktor:ktor-serialization-kotlinx-json-jvm")
 
+    // DATABASE
     implementation("org.postgresql:postgresql:42.7.3")
-
     implementation("org.jetbrains.exposed:exposed-core:0.49.0")
     implementation("org.jetbrains.exposed:exposed-dao:0.49.0")
     implementation("org.jetbrains.exposed:exposed-jdbc:0.49.0")
-
     implementation("com.zaxxer:HikariCP:5.1.0")
     implementation("org.mindrot:jbcrypt:0.4")
 
+    // MAILING
     implementation("jakarta.mail:jakarta.mail-api:2.0.1")
     implementation("org.eclipse.angus:angus-mail:2.0.3")
 
+    // DOCUMENT
     implementation("org.apache.poi:poi:5.2.5")
     implementation("org.apache.poi:poi-ooxml:5.2.5")
 
+    // PDF
+    val pdfbox_version: String = "2.0.30"
+
+    implementation("org.apache.pdfbox:pdfbox:$pdfbox_version")
+    implementation("org.apache.pdfbox:fontbox:$pdfbox_version")
+    implementation("com.google.zxing:core:3.5.3")
+    implementation("com.google.zxing:javase:3.5.3")
+
+    //
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.kotlin.test.junit)
 }

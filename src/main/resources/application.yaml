@@ -1,10 +1,10 @@
 ktor:
-    application:
-        modules:
-            - com.globalbaholash.ApplicationKt.module
-    deployment:
-        port: 8080
-        watch: [ classes, resources ]
+  application:
+    modules:
+      - com.globalbaholash.ApplicationKt.module
+  deployment:
+    port: 8080
+    watch: [ classes, resources ]
 jwt:
   secret: "alisher-nozima-xumoyun-maxfuza-xondamir"
   issuer: "http://localhost:8080"
@@ -34,6 +34,7 @@ email:
 server:
   baseUrl: "http://localhost:8080"
 
-paths:
-  templates: "storage/templates"
-  projects: "storage/projects"
+app:
+  paths:
+    templates: "storage/templates"
+    projects: "storage/projects"

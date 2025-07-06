@@ -1,20 +1,17 @@
-package globalbaholash.routing
+package globalbaholashauto.routing
 
-import com.globalbaholash.common.AssessmentProject
-import com.globalbaholash.common.AssessmentTypeUpsertRequest
 import com.globalbaholash.common.AssignTypeToAssessorRequest
-import com.globalbaholash.common.CreateAssessmentRequest
-import com.globalbaholash.common.ProjectStatus
+import com.globalbaholash.common.CreateAssessmentTypeMetadata
+import com.globalbaholash.common.CreateFieldDefinitionRequest
 import com.globalbaholash.common.UpdateAssessorCreditRequest
 import com.globalbaholash.common.UpdateAssessorStatusRequest
 import com.globalbaholash.common.UpdateTypeNameDescRequest
 import com.globalbaholash.db.AssessmentRepository
-import com.globalbaholash.db.AssessmentTypesTable
 import com.globalbaholash.db.UserRepository
-import com.globalbaholash.db.UsersTable
-import io.ktor.client.plugins.HttpTimeout
-import io.ktor.client.request.request
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.content.PartData
+import io.ktor.http.content.forEachPart
+import io.ktor.http.content.streamProvider
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.log
 import io.ktor.server.auth.authenticate
@@ -22,6 +19,7 @@ import io.ktor.server.auth.jwt.JWTPrincipal
 import io.ktor.server.auth.principal
 import io.ktor.server.plugins.ContentTransformationException
 import io.ktor.server.request.receive
+import io.ktor.server.request.receiveMultipart
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.application
@@ -30,7 +28,11 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 import io.ktor.server.routing.route
-import io.ktor.utils.io.locks.reentrantLock
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.Json
+import java.io.File
+import java.nio.file.Paths
+import java.util.UUID
 
 fun Route.adminRoutes(userRepository: UserRepository, assessmentRepository: AssessmentRepository) {
     authenticate("auth-jwt") {
@@ -56,7 +58,70 @@ fun Route.adminRoutes(userRepository: UserRepository, assessmentRepository: Asse
             // assessment types manipulation
             route("/assessment-types") {
 
-                // create assessment type
+                // create assessment type (new)
+                post {
+                    if (!call.isAdmin()) return@post call.respond(HttpStatusCode.Forbidden, "ACCESS DENIED")
+
+                    var metadata: CreateAssessmentTypeMetadata? = null
+                    val templateFileNames = mutableListOf<String>()
+                    val tempFiles = mutableListOf<File>()
+
+                    try{
+                        val multipartData = call.receiveMultipart()
+
+                        multipartData.forEachPart { part ->
+                            when (part) {
+                                is PartData.FormItem -> {
+                                    if (part.name == "metadata") {
+                                        metadata = Json.decodeFromString<CreateAssessmentTypeMetadata>(part.value)
+                                    }
+                                }
+                                is PartData.FileItem -> {
+                                    val originalFileName = part.originalFileName ?: "template-${UUID.randomUUID()}"
+                                    val tempFile = File.createTempFile("upload-", "-$originalFileName").apply { deleteOnExit() }
+                                    part.streamProvider().use { input -> tempFile.outputStream().buffered().use { output -> input.copyTo(output) } }
+                                    templateFileNames.add(originalFileName)
+                                    tempFiles.add(tempFile)
+                                }
+                                else -> {}
+                            }
+                            part.dispose()
+                        }
+
+                        if (metadata == null || templateFileNames.isEmpty()) {
+                            throw IllegalArgumentException("Missing 'metadata' or template file parts.")
+                        }
+
+                        val fieldDefsRequest = Json.decodeFromString(ListSerializer(CreateFieldDefinitionRequest.serializer()), metadata!!.fieldDefinitionJson)
+
+                        val newType = assessmentRepository.createAssessmentTypeWithTemplates(
+                            name = metadata!!.name,
+                            description = metadata!!.description,
+                            fieldDefinitionsRequest = fieldDefsRequest,
+                            templateFileNames = templateFileNames
+                        )
+
+                        if (newType != null) {
+                            val permanentTemplateDir = Paths.get("storage", "templates", newType.id).toFile()
+                            permanentTemplateDir.mkdirs()
+                            tempFiles.forEachIndexed { index, tempFile ->
+                                val permanentFile = File(permanentTemplateDir, templateFileNames[index])
+                                tempFile.renameTo(permanentFile)
+                            }
+                            call.respond(HttpStatusCode.Created, newType)
+                        } else {
+                            call.respond(HttpStatusCode.Conflict, "Assessment type with this name might already exist.")
+                        }
+
+                    } catch (e: Exception) {
+                        tempFiles.forEach { it.delete() } // Clean up temp files on error
+                        application.log.error("Admin: Failed to create assessment type: ${e.localizedMessage}", e)
+                        call.respond(HttpStatusCode.BadRequest, "Invalid request: ${e.message}")
+                    }
+                } // [*]
+
+                // create assessment type (old)
+                /*DEPRECATED POST
                 post {
                     if (!call.isAdmin())
                         return@post call.respond(HttpStatusCode.Forbidden,
@@ -65,10 +130,11 @@ fun Route.adminRoutes(userRepository: UserRepository, assessmentRepository: Asse
 
                     try {
                         val request = call.receive<AssessmentTypeUpsertRequest>()
-                        val newType = assessmentRepository.createAssessmentType(
+                        val newType = assessmentRepository.createAssessmentTypeWithTemplates(
                             request.name,
                             request.description,
-                            request.fieldDefinitions
+                            request.fieldDefinitions,
+                            request.
                         )
 
                         if(newType != null) {
@@ -90,6 +156,8 @@ fun Route.adminRoutes(userRepository: UserRepository, assessmentRepository: Asse
                         )
                     }
                 } // [*]
+
+                */
 
                 // list all assessment types
                 get {

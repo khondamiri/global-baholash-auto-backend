@@ -6,7 +6,8 @@ import com.globalbaholash.routing.assessmentRoutes
 import com.globalbaholash.routing.authRoutes
 import com.globalbaholash.services.AuthService
 import com.globalbaholash.services.EmailService
-import globalbaholash.routing.adminRoutes
+import globalbaholashauto.routing.adminRoutes
+import globalbaholashauto.services.ReportService
 import io.ktor.server.application.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
@@ -16,6 +17,7 @@ fun Application.configureRouting() {
     val authService = AuthService()
     val assessmentRepository = AssessmentRepositoryImpl(this)
     val emailService = EmailService(environment)
+    val reportService = ReportService(this, assessmentRepository, userRepository)
 
     routing {
         get("/") {
@@ -25,7 +27,7 @@ fun Application.configureRouting() {
         authRoutes(userRepository, authService, emailService)
 
         route("/api") {
-            assessmentRoutes(assessmentRepository, userRepository)
+            assessmentRoutes(assessmentRepository, userRepository, reportService)
             adminRoutes(userRepository, assessmentRepository)
         }
     }
